@@ -1,6 +1,11 @@
-# wa-gateway
+<div align="center">
+  <img src="https://img.shields.io/badge/wa--gateway-25D366?style=for-the-badge&logo=whatsapp&logoColor=white" alt="wa-gateway" height="42" />
+  <p><em>Gateway HTTP independiente para WhatsApp</em></p>
+</div>
 
-Gateway HTTP independiente para WhatsApp. Expone una API REST que permite a cualquier aplicación enviar y recibir mensajes, imágenes y archivos a través de WhatsApp, sin acoplarse a ningún framework ni lenguaje específico.
+---
+
+Expone una API REST que permite a cualquier aplicación enviar y recibir mensajes, imágenes y archivos a través de WhatsApp, sin acoplarse a ningún framework ni lenguaje específico.
 
 ---
 
@@ -629,3 +634,11 @@ Los niveles usados son `INFO`, `WARNING` y `ERROR`. Este formato facilita el par
 ### Debounce en eventos de WhatsApp
 
 `whatsapp-web.js` puede disparar los eventos `ready` y `disconnected` múltiples veces en ráfaga (comportamiento interno del cliente). Se implementa un guard de 2000ms: si el mismo evento llega en menos de 2 segundos desde el anterior, se ignora. Esto evita enviar múltiples emails de alerta por un solo evento.
+
+---
+
+## Créditos
+
+wa-gateway está construido sobre [whatsapp-web.js](https://github.com/pedroslopez/whatsapp-web.js), una librería no oficial para WhatsApp Web desarrollada por [Pedro S. Lopez](https://github.com/pedroslopez) y sus colaboradores. Esta librería es la que gestiona la sesión, la autenticación QR, el envío y recepción de mensajes, y la interacción con WhatsApp Web a través de Puppeteer.
+
+> **Nota:** whatsapp-web.js no está afiliado ni respaldado por WhatsApp o Meta. El uso de esta librería está sujeto a los términos de servicio de WhatsApp.
