@@ -11,5 +11,8 @@
     "whatsapp-web.js": "latest",
     "qrcode-terminal": "latest",
     "nodemailer": "latest"
+  },
+  "puppeteer": {
+    "skipDownload": true
   }
 }
