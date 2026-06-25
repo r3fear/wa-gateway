@@ -36,8 +36,18 @@ process.on('unhandledRejection', (reason) => {
     const msg = reason instanceof Error ? reason.message : String(reason);
     if (msg.includes('EBUSY') || msg.includes('ENOENT')) {
         log('WARNING', 'Promise rechazada por archivo bloqueado (ignorado): ' + msg);
+    } else if (msg.includes('Failed to launch the browser process')) {
+        log('ERROR', 'Chrome no pudo iniciarse. Verifica chrome_path en config.json.');
+        alertAndExit(
+            'wa-gateway — Chrome no pudo iniciarse ' + fmtNow(),
+            'El proceso de Chrome falló al iniciar en wa-gateway.\n\nVerifica que chrome_path en config.json apunta al ejecutable correcto y que Chrome está instalado.\n\nSession: ' + SESSION_ID + '\n\nDetalle: ' + msg
+        );
     } else {
         log('ERROR', 'Promise rechazada no capturada: ' + msg);
+        alertAndExit(
+            'wa-gateway — Error fatal ' + fmtNow(),
+            'Error no capturado en wa-gateway que requiere reinicio.\n\nSession: ' + SESSION_ID + '\n\nDetalle: ' + msg
+        );
     }
 });
 
