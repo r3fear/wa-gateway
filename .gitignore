@@ -1,0 +1,18 @@
+# Dependencias
+node_modules/
+
+# Configuracion local (contiene credenciales y rutas especificas del entorno)
+config.json
+
+# Sesion de WhatsApp (datos de autenticacion — nunca subir)
+.wwebjs_auth/
+.wwebjs_cache/
+
+# Archivos multimedia recibidos
+media/
+
+# Logs del servicio
+logs/
+
+# Claude Code
+.claude/

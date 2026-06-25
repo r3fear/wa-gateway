@@ -1,0 +1,15 @@
+{
+  "name": "wa-gateway",
+  "version": "1.0.0",
+  "description": "Gateway HTTP independiente para WhatsApp — envío, recepción y webhooks",
+  "main": "wa-server.js",
+  "scripts": {
+    "start": "node wa-server.js",
+    "login": "node wa-login.js"
+  },
+  "dependencies": {
+    "whatsapp-web.js": "latest",
+    "qrcode-terminal": "latest",
+    "nodemailer": "latest"
+  }
+}
