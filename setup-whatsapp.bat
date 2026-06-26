@@ -176,7 +176,7 @@ echo   [OK] config.json
 
 :: 6. Chrome (ruta de config.json via PowerShell)
 set "CHROME_PATH="
-for /f "usebackq tokens=* delims=" %%i in (`powershell -NoProfile -Command "(Get-Content '%~dp0config.json' ^| ConvertFrom-Json).chrome_path" 2^>nul`) do set "CHROME_PATH=%%i"
+for /f "usebackq tokens=* delims=" %%i in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "try { (Get-Content '%~dp0config.json' -Raw | ConvertFrom-Json).chrome_path } catch { '' }" 2^>nul`) do set "CHROME_PATH=%%i"
 if defined CHROME_PATH (
     if exist "%CHROME_PATH%" (
         echo   [OK] Chrome: %CHROME_PATH%
@@ -187,6 +187,7 @@ if defined CHROME_PATH (
     )
 ) else (
     echo   [?] No se pudo leer chrome_path desde config.json.
+    echo       Verifica que chrome_path este definido en config.json.
 )
 
 :: 7. Servicio ya instalado?
@@ -203,29 +204,29 @@ if %errorlevel% equ 0 (
     nssm remove %SERVICE% confirm >nul 2>&1
 )
 
+:: 8. Preparar ruta de directorio (sin backslash final — evita problemas de quoting)
+set "APP_DIR=%~dp0"
+if "%APP_DIR:~-1%"=="\" set "APP_DIR=%APP_DIR:~0,-1%"
+
 echo.
 echo   Todas las verificaciones completadas.
 echo   Procediendo con la instalacion...
 echo.
 pause
 
-:: 8. npm install
+:: 9. npm install
 echo.
 echo   Instalando dependencias (npm install)...
-call npm install --prefix "%~dp0"
+call npm install --prefix "%APP_DIR%"
 if %errorlevel% neq 0 (
-    echo   [!] Error en npm install. Revisa la conexion a internet.
+    echo   [!] Error en npm install. Revisa la conexion a internet o los permisos.
     goto FIN_INSTALAR
 )
 echo   [OK] Dependencias instaladas.
 
-:: 9. Crear carpeta logs
-if not exist "%~dp0logs" mkdir "%~dp0logs"
+:: 10. Crear carpeta logs
+if not exist "%APP_DIR%\logs" mkdir "%APP_DIR%\logs"
 echo   [OK] Carpeta logs\ creada.
-
-:: 10. Preparar ruta de directorio (sin backslash final para NSSM)
-set "APP_DIR=%~dp0"
-if "%APP_DIR:~-1%"=="\" set "APP_DIR=%APP_DIR:~0,-1%"
 
 :: 11. Instalar y configurar servicio NSSM
 echo.
