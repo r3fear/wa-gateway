@@ -86,6 +86,10 @@ let lastDisconnectedTs = 0;
 let webhooks = Array.isArray(config.webhooks) ? [...config.webhooks] : [];
 const startTime = Date.now();
 
+// Colas por consumer: cada proyecto registrado recibe una copia de cada mensaje.
+// Si no hay consumers registrados, los mensajes van a la cola global (inbox).
+const consumerQueues = new Map();
+
 // ---------------------------------------------------------------------------
 // Cleanup lock files
 // ---------------------------------------------------------------------------
@@ -385,10 +389,15 @@ client.on('message', async (msg) => {
         }
     }
 
-    if (inbox.length >= MAX_INBOX) {
-        inbox.shift();
+    if (consumerQueues.size > 0) {
+        for (const [, queue] of consumerQueues) {
+            if (queue.length >= MAX_INBOX) queue.shift();
+            queue.push(entry);
+        }
+    } else {
+        if (inbox.length >= MAX_INBOX) inbox.shift();
+        inbox.push(entry);
     }
-    inbox.push(entry);
     dispatchWebhooks(entry);
 });
 
@@ -456,6 +465,15 @@ const server = http.createServer(async (req, res) => {
 
         // GET /inbox
         if (pathname === '/inbox' && method === 'GET') {
+            const consumer = url.searchParams.get('consumer');
+            if (consumer) {
+                if (!consumerQueues.has(consumer)) {
+                    return send400(res, 'Consumer no registrado. Llama POST /register-consumer primero.');
+                }
+                const messages = consumerQueues.get(consumer).slice();
+                consumerQueues.set(consumer, []);
+                return send200(res, { ok: true, messages });
+            }
             const messages = inbox.slice();
             inbox = [];
             return send200(res, { ok: true, messages });
@@ -468,6 +486,10 @@ const server = http.createServer(async (req, res) => {
 
         // GET /health
         if (pathname === '/health' && method === 'GET') {
+            const consumersStatus = [];
+            for (const [name, queue] of consumerQueues) {
+                consumersStatus.push({ name, queued: queue.length });
+            }
             return send200(res, {
                 ok: true,
                 connected: isReady,
@@ -475,6 +497,7 @@ const server = http.createServer(async (req, res) => {
                 subscribers: webhooks.length,
                 uptime_seconds: Math.floor((Date.now() - startTime) / 1000),
                 session_id: SESSION_ID,
+                consumers: consumersStatus,
             });
         }
 
@@ -608,9 +631,52 @@ const server = http.createServer(async (req, res) => {
             return;
         }
 
+        // GET /consumers
+        if (pathname === '/consumers' && method === 'GET') {
+            const consumers = [];
+            for (const [name, queue] of consumerQueues) {
+                consumers.push({ name, queued: queue.length });
+            }
+            return send200(res, { ok: true, consumers });
+        }
+
+        // POST /register-consumer  /  DELETE /register-consumer
+        if (pathname === '/register-consumer') {
+            let body;
+            try { body = await readBody(req); } catch (e) { return send400(res, e.message); }
+
+            const { consumer } = body;
+            if (!consumer || typeof consumer !== 'string' || !consumer.trim()) {
+                return send400(res, 'Falta campo: consumer');
+            }
+            const name = consumer.trim();
+
+            if (method === 'POST') {
+                if (!consumerQueues.has(name)) {
+                    consumerQueues.set(name, []);
+                    log('INFO', 'Consumer registrado: ' + name + ' (0 mensajes en cola)');
+                } else {
+                    log('INFO', 'Consumer ya registrado: ' + name + ' (' + consumerQueues.get(name).length + ' mensajes en cola)');
+                }
+                return send200(res, { ok: true, consumer: name, queued: consumerQueues.get(name).length });
+            }
+
+            if (method === 'DELETE') {
+                if (!consumerQueues.has(name)) {
+                    return send400(res, 'Consumer no encontrado: ' + name);
+                }
+                consumerQueues.delete(name);
+                log('INFO', 'Consumer eliminado: ' + name);
+                return send200(res, { ok: true });
+            }
+
+            return send405(res);
+        }
+
         // Method guard for known paths with wrong method
         const knownPaths = ['/send', '/register-numbers', '/subscribe', '/unsubscribe',
-            '/status', '/inbox', '/subscribers', '/health', '/groups'];
+            '/status', '/inbox', '/subscribers', '/health', '/groups',
+            '/consumers', '/register-consumer'];
         if (knownPaths.includes(pathname)) {
             return send405(res);
         }

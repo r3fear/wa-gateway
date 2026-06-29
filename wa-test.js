@@ -121,6 +121,14 @@ async function testHealth() {
         console.log('  Uptime:              ' + hh + ':' + mm + ':' + ss + '  (' + uptime + 's)');
         console.log('  Mensajes en inbox:   ' + h.inbox_size);
         console.log('  Webhooks activos:    ' + h.subscribers);
+        if (h.consumers && h.consumers.length > 0) {
+            console.log('  Consumers:           ' + h.consumers.length);
+            for (const c of h.consumers) {
+                console.log('    - ' + c.name + ':  ' + c.queued + ' mensaje(s) en cola');
+            }
+        } else {
+            console.log('  Consumers:           ninguno (usando inbox global)');
+        }
     } catch (err) {
         console.log('  ERROR de conexion: ' + err.message);
     }
@@ -232,6 +240,37 @@ async function testGroups() {
     console.log('');
 }
 
+async function testConsumers() {
+    console.log('  Consumers registrados');
+    separator();
+
+    try {
+        const result = await httpGet('/consumers');
+        if (!result.ok) {
+            console.log('  ERROR: ' + result.error);
+            console.log('');
+            return;
+        }
+
+        const consumers = result.consumers;
+        if (consumers.length === 0) {
+            console.log('  No hay consumers registrados.');
+            console.log('  Los mensajes van a la cola global (GET /inbox sin parametros).');
+        } else {
+            console.log('  ' + consumers.length + ' consumer(s) registrado(s):');
+            console.log('');
+            console.log('  ' + pad('Consumer', 30) + '  Mensajes en cola');
+            separator();
+            for (const c of consumers) {
+                console.log('  ' + pad(c.name, 30) + '  ' + c.queued);
+            }
+        }
+    } catch (err) {
+        console.log('  ERROR de conexion: ' + err.message);
+    }
+    console.log('');
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -278,11 +317,12 @@ async function main() {
         console.log('    2. Enviar mensaje de prueba');
         console.log('    3. Ver mensajes entrantes (inbox)');
         console.log('    4. Listar grupos');
+        console.log('    5. Ver consumers registrados');
         console.log('    0. Volver al menu principal');
         console.log('  -----------------------------------------------');
         console.log('');
 
-        const opcion = await ask(rl, '  Selecciona [0-4]: ');
+        const opcion = await ask(rl, '  Selecciona [0-5]: ');
         console.log('');
 
         if (opcion === '1') {
@@ -293,6 +333,8 @@ async function main() {
             await testInbox();
         } else if (opcion === '4') {
             await testGroups();
+        } else if (opcion === '5') {
+            await testConsumers();
         } else if (opcion === '0') {
             running = false;
         } else {
