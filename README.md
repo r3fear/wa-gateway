@@ -233,7 +233,7 @@ Estado de la conexión WhatsApp. Útil para verificar que el servicio está list
 
 ### GET /health
 
-Estado completo del servicio, incluyendo uptime y tamaño del inbox.
+Estado completo del servicio, incluyendo uptime, tamaño del inbox y consumers registrados.
 
 **Respuesta:**
 ```json
@@ -243,15 +243,33 @@ Estado completo del servicio, incluyendo uptime y tamaño del inbox.
   "inbox_size": 3,
   "subscribers": 1,
   "uptime_seconds": 3600,
-  "session_id": "wa-gateway"
+  "session_id": "wa-gateway",
+  "consumers": [
+    { "name": "mi-proyecto", "queued": 2 },
+    { "name": "otro-proyecto", "queued": 0 }
+  ]
 }
 ```
+
+`consumers` es un array vacío si no hay consumers registrados.
 
 ---
 
 ### GET /inbox
 
-Retorna **y vacía** la cola de mensajes entrantes (modelo polling).
+Retorna **y vacía** la cola de mensajes entrantes (modelo polling). Soporta dos modos:
+
+**Modo consumer** — cola dedicada al proyecto indicado (recomendado cuando hay múltiples proyectos):
+```
+GET /inbox?consumer=mi-proyecto
+```
+Retorna solo los mensajes de ese consumer y vacía únicamente su cola. Requiere haber llamado `POST /register-consumer` previamente. Si el consumer no existe, responde `{ "ok": false, "error": "Consumer no registrado..." }`.
+
+**Modo global** — cola compartida (backward compatible, sin parámetro):
+```
+GET /inbox
+```
+Retorna y vacía la cola global. Solo recibe mensajes cuando no hay consumers registrados.
 
 **Respuesta — mensaje de texto:**
 ```json
@@ -409,6 +427,80 @@ Lista las URLs de webhook actualmente registradas.
 
 ---
 
+### POST /register-consumer
+
+Registra un proyecto como consumer independiente con su propia cola de mensajes. A partir del registro, cada mensaje entrante se copia a la cola de este consumer de forma aislada.
+
+Si el consumer ya estaba registrado, responde `ok` sin borrar la cola existente — es seguro llamarlo en cada arranque del proyecto.
+
+**Body:**
+```json
+{ "consumer": "mi-proyecto" }
+```
+
+**Respuesta:**
+```json
+{ "ok": true, "consumer": "mi-proyecto", "queued": 0 }
+```
+
+`queued` indica los mensajes pendientes actualmente en la cola de ese consumer.
+
+> Los consumers son en memoria y se pierden al reiniciar wa-gateway. Cada proyecto debe llamar este endpoint al arrancar para re-registrarse automáticamente.
+
+**Ejemplo con curl:**
+```bash
+curl -X POST http://127.0.0.1:3000/register-consumer \
+  -H "Content-Type: application/json" \
+  -d "{\"consumer\":\"mi-proyecto\"}"
+```
+
+---
+
+### DELETE /register-consumer
+
+Elimina un consumer y descarta su cola de mensajes pendientes.
+
+**Body:**
+```json
+{ "consumer": "mi-proyecto" }
+```
+
+**Respuesta:**
+```json
+{ "ok": true }
+```
+
+**Ejemplo con curl:**
+```bash
+curl -X DELETE http://127.0.0.1:3000/register-consumer \
+  -H "Content-Type: application/json" \
+  -d "{\"consumer\":\"mi-proyecto\"}"
+```
+
+---
+
+### GET /consumers
+
+Lista todos los consumers registrados y el número de mensajes pendientes en cada cola. Útil para diagnóstico.
+
+**Respuesta:**
+```json
+{
+  "ok": true,
+  "consumers": [
+    { "name": "mi-proyecto", "queued": 3 },
+    { "name": "otro-proyecto", "queued": 0 }
+  ]
+}
+```
+
+**Ejemplo con curl:**
+```bash
+curl http://127.0.0.1:3000/consumers
+```
+
+---
+
 ## Mensajes entrantes con multimedia
 
 Cuando alguien envía una imagen, video, documento, audio o nota de voz, wa-gateway:
@@ -475,14 +567,25 @@ Cuando llega un mensaje, wa-gateway hace `POST` inmediato a cada URL registrada.
 
 Pasos para conectar cualquier aplicación a wa-gateway:
 
-### 1. Verificar que el servicio está listo
+### 1. Registrar el proyecto como consumer
+
+```http
+POST /register-consumer
+{ "consumer": "mi-proyecto" }
+```
+
+Llamar al arrancar la aplicación, antes de cualquier otra operación. Esto crea una cola de mensajes dedicada para este proyecto. Llamar `/register-consumer` al arrancar garantiza que la cola existe antes de empezar a enviar o recibir, incluso si wa-gateway fue reiniciado.
+
+> **Backward compatible:** los proyectos que no usen consumers siguen funcionando igual — `GET /inbox` sin `?consumer` retorna la cola global.
+
+### 2. Verificar que el servicio está listo
 
 ```http
 GET /status
 ```
 Si `connected` es `false`, esperar o notificar al operador para que re-autentique.
 
-### 2. Registrar los contactos esperados (opcional pero recomendado)
+### 3. Registrar los contactos esperados (opcional pero recomendado)
 
 ```http
 POST /register-numbers
@@ -491,36 +594,42 @@ POST /register-numbers
 
 Esto resuelve el problema de `@lid`. Llamar una vez al arrancar la aplicación con los números de los usuarios con los que se espera interacción.
 
-### 3. Enviar mensajes
+### 4. Enviar mensajes
 
 ```http
 POST /send
 { "to": "521XXXXXXXXXX", "message": "Hola" }
 ```
 
-### 4. Recibir mensajes
+### 5. Recibir mensajes
 
-**Opción A — Polling** (más simple, sin servidor propio):
+**Opción A — Polling con cola dedicada** (recomendado cuando hay múltiples proyectos):
 ```http
-GET /inbox  →  consumir mensajes, vacía la cola
+GET /inbox?consumer=mi-proyecto  →  consumir mensajes, vacía solo la cola de este proyecto
 ```
-Llamar cada N segundos según la latencia aceptable para la aplicación.
+Llamar cada N segundos. Otros proyectos no ven estos mensajes ni pueden vaciar esta cola.
+
+**Opción A (alternativa) — Polling con cola global** (para proyectos únicos o que no migraron):
+```http
+GET /inbox  →  consumir mensajes de la cola global
+```
+Solo recibe mensajes cuando no hay consumers registrados.
 
 **Opción B — Webhook push** (menor latencia, requiere endpoint HTTP en la aplicación):
 ```http
 POST /subscribe
 { "url": "http://mi-app:PUERTO/wa-incoming" }
 ```
-wa-gateway hará POST a ese endpoint por cada mensaje recibido.
+wa-gateway hará POST a ese endpoint por cada mensaje recibido, independientemente de las colas.
 
-### 5. Descargar archivos multimedia recibidos
+### 6. Descargar archivos multimedia recibidos
 
 Si el mensaje tiene `media_filename`:
 ```http
 GET /media/{media_filename}
 ```
 
-### 6. Enviar a grupos
+### 7. Enviar a grupos
 
 Primero obtener el ID del grupo:
 ```http
@@ -634,6 +743,20 @@ Los niveles usados son `INFO`, `WARNING` y `ERROR`. Este formato facilita el par
 ### Debounce en eventos de WhatsApp
 
 `whatsapp-web.js` puede disparar los eventos `ready` y `disconnected` múltiples veces en ráfaga (comportamiento interno del cliente). Se implementa un guard de 2000ms: si el mismo evento llega en menos de 2 segundos desde el anterior, se ignora. Esto evita enviar múltiples emails de alerta por un solo evento.
+
+### Sistema de consumers (multi-inbox)
+
+- **Los consumers son en memoria** — se pierden al reiniciar wa-gateway. Cada proyecto consumidor debe llamar `POST /register-consumer` en su startup para re-registrarse automáticamente. Esto es intencional: garantiza que solo están registrados los proyectos que están activos.
+
+- **Fan-out atómico** — cuando llega un mensaje, se copia a la cola de todos los consumers registrados simultáneamente antes de retornar del handler. No hay pérdida de mensajes ni condición de carrera entre proyectos.
+
+- **Backward compatible** — si no hay consumers registrados, los mensajes van a la cola global (`GET /inbox` sin `?consumer`). Los proyectos que no usen el sistema de consumers no necesitan ningún cambio.
+
+- **Límite por cola** — el máximo de 50 mensajes aplica de forma independiente por cada consumer, igual que el inbox global. Si un consumer no hace polling con frecuencia y llega al límite, el mensaje más antiguo de *su* cola se descarta, sin afectar a otros.
+
+- **`GET /consumers`** es el endpoint de diagnóstico para verificar en tiempo real qué proyectos están registrados y cuántos mensajes tienen pendientes.
+
+- **Nombres de consumer** — usar nombres descriptivos y estables: `"ringalert"`, `"ttlockalert"`, `"mi-sistema"`. El nombre debe coincidir exactamente entre el `POST /register-consumer` y el `GET /inbox?consumer=`. Distingue mayúsculas y minúsculas.
 
 ---
 
