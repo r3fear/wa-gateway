@@ -91,6 +91,16 @@ async function main() {
     console.log('Session ID: ' + SESSION_ID);
     console.log('');
 
+    // Detener el servicio NSSM antes de todo.
+    // Si NSSM reinicia wa-server.js durante el proceso, Chrome vuelve a arrancar
+    // y Puppeteer falla con "browser already running" aunque lo hayamos matado.
+    console.log('Deteniendo servicio (si esta corriendo)...');
+    try { execSync('nssm stop ' + SESSION_ID, { stdio: 'ignore', timeout: 10000 }); } catch (_) {}
+    try { execSync('sc stop ' + SESSION_ID, { stdio: 'ignore', timeout: 5000 }); } catch (_) {}
+    killChrome();
+    waitSeconds(3);
+    console.log('');
+
     // Verificar si existe sesion previa
     if (fs.existsSync(SESSION_DEFAULT_DIR)) {
         console.log('Se encontro una sesion activa en:');
