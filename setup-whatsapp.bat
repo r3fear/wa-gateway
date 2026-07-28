@@ -70,7 +70,7 @@ echo.
 echo   Deteniendo procesos residuales...
 taskkill /F /IM node.exe /T >nul 2>&1
 taskkill /F /IM chrome.exe /T >nul 2>&1
-timeout /t 2 /nobreak >nul
+timeout /t 4 /nobreak >nul
 echo.
 echo   Iniciando configuracion de sesion...
 echo.

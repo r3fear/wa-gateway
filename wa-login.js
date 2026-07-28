@@ -54,7 +54,11 @@ function waitSeconds(n) {
 
 function cleanupLockFiles() {
     const sessionDir = path.join(AUTH_DIR, 'session-' + SESSION_ID);
-    const lockFiles = ['SingletonLock', 'SingletonCookie', 'SingletonSocket', 'DevToolsActivePort'];
+    // .puppeteer_lock: creado por puppeteer-core v24+ al lanzar Chrome; no se limpia en crash
+    const lockFiles = [
+        'SingletonLock', 'SingletonCookie', 'SingletonSocket',
+        'DevToolsActivePort', '.puppeteer_lock',
+    ];
     for (const fname of lockFiles) {
         const fpath = path.join(sessionDir, fname);
         try {
@@ -111,7 +115,7 @@ async function main() {
     // Limpiar lock files y procesos antes de iniciar
     console.log('Preparando entorno...');
     killChrome();
-    waitSeconds(2);
+    waitSeconds(3);
     cleanupLockFiles();
 
     // Configurar cliente
@@ -174,13 +178,30 @@ async function main() {
         process.exit(1);
     });
 
+    // Kill final: en caso de que NSSM haya reiniciado Chrome durante la configuracion
+    killChrome();
+    waitSeconds(3);
+    cleanupLockFiles();
+
     console.log('Iniciando cliente WhatsApp, espera el codigo QR...');
     console.log('');
 
-    client.initialize();
+    try {
+        await client.initialize();
+    } catch (err) {
+        const msg = err.message || String(err);
+        try { await client.destroy(); } catch (_) {}
+        if (msg.includes('Target closed') || err.constructor.name === 'TargetCloseError') {
+            console.error('');
+            console.error('ERROR: La pagina de WhatsApp se cerro durante la carga.');
+            console.error('Es un error transitorio. Vuelve a ejecutar la opcion 1 del menu.');
+            process.exit(1);
+        }
+        throw err;
+    }
 }
 
 main().catch((err) => {
-    console.error('Error inesperado: ' + err.message);
+    console.error('Error inesperado: ' + (err.message || err));
     process.exit(1);
 });
