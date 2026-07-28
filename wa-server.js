@@ -219,21 +219,21 @@ function dispatchWebhooks(payload) {
 async function buildLidMap(numbers) {
     let mapped = 0;
     for (const num of numbers) {
-        const jid = num.includes('@') ? num : num + '@c.us';
+        // Normalizar: quitar espacios, +, y @c.us si viene incluido
+        const clean = num.replace(/[^0-9]/g, '');
         try {
-            const chat = await client.getChatById(jid);
-            const messages = await chat.fetchMessages({ limit: 10 });
-            for (const msg of messages) {
-                if (msg.fromMe) continue;
-                const from = msg.author || msg.from;
-                if (from && from.endsWith('@lid')) {
-                    const lid = from.replace('@lid', '');
-                    lidToNumber[lid] = num;
-                    mapped++;
-                    log('INFO', 'Mapeado @lid ' + lid + ' -> ' + num);
-                    break;
-                }
+            // getNumberId consulta el servidor de WhatsApp y devuelve el ID real
+            // (puede ser @c.us o @lid segun la version de WhatsApp del contacto)
+            const numberId = await client.getNumberId(clean);
+            if (!numberId) {
+                log('WARNING', 'Numero ' + num + ' no encontrado en WhatsApp (no tiene cuenta activa)');
+                continue;
             }
+            const user = numberId.user;
+            const server = numberId.server; // 'c.us' o 'lid'
+            lidToNumber[user] = num;
+            mapped++;
+            log('INFO', 'Mapeado ' + user + '@' + server + ' -> ' + num);
         } catch (err) {
             log('WARNING', 'No se pudo mapear numero ' + num + ': ' + err.message);
         }
