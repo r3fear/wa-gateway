@@ -697,6 +697,7 @@ Crear dos directorios con sus propios `config.json` e instalar dos servicios NSS
 | Webhook no recibe mensajes | URL incorrecta o servicio receptor caído | Verificar con `GET /subscribers` y revisar el log |
 | `ERROR: No se pudo leer config.json` | Falta el archivo | Copiar `config.json.example` a `config.json` y configurar |
 | Media recibida no se guarda | Error al descargar | Revisar el log (aparece como `WARNING`); puede ser un archivo muy grande o un tipo bloqueado por WhatsApp |
+| `/send` con `imagePath` falla con `Data passed to getter must include an id property` | Cambio en WhatsApp Web (sep 2026) no soportado aún por whatsapp-web.js 1.34.7 | `scripts/patch-whatsapp-web.js` lo corrige; se aplica solo en `npm install` (postinstall). Si el error persiste, correr `npm install` de nuevo |
 | `GET /media/:filename` responde 404 | El archivo no existe en `media_dir` | Verificar que `media_dir` en config.json apunta al directorio correcto |
 
 ---

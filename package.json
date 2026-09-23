@@ -5,7 +5,8 @@
   "main": "wa-server.js",
   "scripts": {
     "start": "node wa-server.js",
-    "login": "node wa-login.js"
+    "login": "node wa-login.js",
+    "postinstall": "node scripts/patch-whatsapp-web.js"
   },
   "dependencies": {
     "whatsapp-web.js": "1.34.7",
