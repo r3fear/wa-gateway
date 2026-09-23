@@ -512,12 +512,17 @@ const server = http.createServer(async (req, res) => {
 
             const jid = to.includes('@') ? to : to + '@c.us';
 
+            // sendSeen: false — el "marcar como leido" interno de whatsapp-web.js falla
+            // con versiones recientes de WhatsApp Web ("Data passed to getter must include
+            // an id property") y aborta el envio antes de que salga el mensaje.
+            const sendOpts = { sendSeen: false };
+
             try {
-                await client.sendMessage(jid, message);
+                await client.sendMessage(jid, message, sendOpts);
 
                 if (imagePath && fs.existsSync(imagePath)) {
                     const media = MessageMedia.fromFilePath(imagePath);
-                    await client.sendMessage(jid, media);
+                    await client.sendMessage(jid, media, sendOpts);
                     log('INFO', 'Imagen enviada a ' + jid + ' desde ' + imagePath);
                 }
 
